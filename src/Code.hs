@@ -1,7 +1,7 @@
 module Code (
   Code,
   fromList, toList,
-  get, getChar, getStm,
+  get, getCharacter, getStatement, isStatement,
   set
 ) where
 
@@ -24,11 +24,14 @@ toList = Map.toList
 get :: Position -> Code -> (Char, Statement)
 get position code = Maybe.fromJust $ Map.lookup position code
 
-getChar :: Position -> Code -> Char
-getChar position code = fst $ get position code
+getCharacter :: Position -> Code -> Char
+getCharacter position code = fst $ get position code
 
-getStm :: Position -> Code -> Statement
-getStm position code = snd $ get position code
+getStatement :: Position -> Code -> Statement
+getStatement position code = snd $ get position code
+
+isStatement :: Position -> Code -> Statement -> Bool
+isStatement position code statement = statement == snd (get position code)
 
 set :: Position -> (Char, Statement) -> Code -> Code
 set = Map.insert

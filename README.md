@@ -1,6 +1,6 @@
 # Hafunge #
 
-A [Befunge-93](http://catseye.tc/node/Befunge-93) interpreter in Haskell.
+A [Befunge-93](http://catseye.tc/node/Befunge-93) interpreter in Haskell using Monads.
 
 ### Licence ###
 

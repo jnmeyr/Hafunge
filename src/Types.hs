@@ -1,17 +1,29 @@
 module Types (
-  Movement(..),
+  Movement(..), movement, randomMovement,
   Output,
   Position,
   Statement(..),
-  Status,
   Value
 ) where
+
+import System.Random (StdGen, randomR)
 
 data Movement =
   LeftMvm |
   RightMvm |
   UpMvm |
   DownMvm
+
+movement :: Int -> Movement
+movement n
+  | n == 0    = LeftMvm
+  | n == 1    = RightMvm
+  | n == 2    = UpMvm
+  | n == 3    = DownMvm
+  | otherwise = error "movement"
+
+randomMovement :: StdGen -> (Movement, StdGen)
+randomMovement generator = let (n, generator') = randomR (0, 3) generator in (movement n, generator')
 
 type Output = String
 
@@ -24,10 +36,10 @@ data Statement =
   RandomMovementStm |
   EndStm |
   PopAndPrintValueStm |
-  PopAndPrintAsciiStm |
+  PopAndPrintCharStm |
   PopAndDiscardStm |
-  PopAndMoveHorStm |
-  PopAndMoveVerStm |
+  PopAndMoveHorizontalStm |
+  PopAndMoveVerticalStm |
   DuplicateStm |
   SwapStm |
   AddStm |
@@ -43,6 +55,31 @@ data Statement =
   ToggleReadStm |
   ReadStm
 
-type Status = Bool
+instance Eq Statement where
+  EmptyStm                == EmptyStm                = True
+  ValueStm _              == ValueStm _              = True
+  MovementStm _           == MovementStm _           = True
+  RandomMovementStm       == RandomMovementStm       = True
+  EndStm                  == EndStm                  = True
+  PopAndPrintValueStm     == PopAndPrintValueStm     = True
+  PopAndPrintCharStm      == PopAndPrintCharStm      = True
+  PopAndDiscardStm        == PopAndDiscardStm        = True
+  PopAndMoveHorizontalStm == PopAndMoveHorizontalStm = True
+  PopAndMoveVerticalStm   == PopAndMoveVerticalStm   = True
+  DuplicateStm            == DuplicateStm            = True
+  SwapStm                 == SwapStm                 = True
+  AddStm                  == AddStm                  = True
+  SubStm                  == SubStm                  = True
+  MulStm                  == MulStm                  = True
+  DivStm                  == DivStm                  = True
+  ModStm                  == ModStm                  = True
+  GreaterStm              == GreaterStm              = True
+  NotStm                  == NotStm                  = True
+  SkipStm                 == SkipStm                 = True
+  GetStm                  == GetStm                  = True
+  SetStm                  == SetStm                  = True
+  ToggleReadStm           == ToggleReadStm           = True
+  ReadStm                 == ReadStm                 = True
+  _                       == _                       = False
 
 type Value = Int
