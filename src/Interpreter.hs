@@ -57,27 +57,41 @@ instance MonadPlus Interpreter where
   mzero = empty
   mplus = (<|>)
 
-requireStm :: Statement -> Interpreter ()
-requireStm statement = Interpreter $ \ state@(State _ code _ _ position _) ->
-  if isStatement position code statement then Just ((), state) else Nothing
+continue :: Interpreter ()
+continue = Interpreter $ \ (State generator code stack movement (x, y) output) ->
+  let
+    position = case movement of
+      LeftMvm -> (x - 1, y)
+      RightMvm -> (x + 1, y)
+      UpMvm -> (x, y - 1)
+      DownMvm -> (x, y + 1)
+  in
+    Just ((), State generator code stack movement position output)
 
-requireMovementStm :: Interpreter Movement
-requireMovementStm = Interpreter $ \ state@(State _ code _ _ position _) ->
+abort :: Interpreter ()
+abort = mzero
+
+onStm :: Statement -> Interpreter () -> Interpreter ()
+onStm statement (Interpreter f) = (Interpreter $ \ state@(State _ code _ _ position _) ->
+  if isStatement position code statement then f state else Nothing) >> continue
+
+onMovementStm :: (Movement -> Interpreter ()) -> Interpreter ()
+onMovementStm f = (Interpreter $ \ state@(State _ code _ _ position _) ->
   case getStatement position code of
-    MovementStm movement -> Just (movement, state)
-    _ -> Nothing
+    MovementStm movement -> let (Interpreter g) = f movement in g state
+    _ -> Nothing) >> continue
 
-requireValueStm :: Interpreter Value
-requireValueStm = Interpreter $ \ state@(State _ code _ _ position _) ->
+onValueStm :: (Value -> Interpreter ()) -> Interpreter ()
+onValueStm f = (Interpreter $ \ state@(State _ code _ _ position _) ->
   case getStatement position code of
-    ValueStm value -> Just (value, state)
-    _ -> Nothing
+    ValueStm value -> let (Interpreter g) = f value in g state
+    _ -> Nothing) >> continue
 
-requireToggleReadStm :: Interpreter (Maybe Char)
-requireToggleReadStm = Interpreter $ \ state@(State _ code _ _ position _) ->
+onToggleReadStm :: (Maybe Char -> Interpreter ()) -> Interpreter ()
+onToggleReadStm f = Interpreter $ \ state@(State _ code _ _ position _) ->
   case get position code of
-    (_, ToggleReadStm) -> Just (Nothing, state)
-    (character, _) -> Just (Just character, state)
+    (_, ToggleReadStm) -> let (Interpreter g) = (f Nothing) in g state
+    (character, _) -> let (Interpreter g) = (f $ Just character) in g state
 
 doMove :: Movement -> Interpreter ()
 doMove movement = Interpreter $ \ (State generator code stack _ position output) ->
@@ -115,190 +129,134 @@ doSet :: Position -> (Char, Statement) -> Interpreter ()
 doSet position (character, statement) = Interpreter $ \ (State generator code stack movement position' output) ->
   let code' = set position (character, statement) code in Just ((), State generator code' stack movement position' output)
 
-continue :: Interpreter ()
-continue = Interpreter $ \ (State generator code stack movement (x, y) output) ->
-  let
-    position = case movement of
-      LeftMvm -> (x - 1, y)
-      RightMvm -> (x + 1, y)
-      UpMvm -> (x, y - 1)
-      DownMvm -> (x, y + 1)
-  in
-    Just ((), State generator code stack movement position output)
-
-abort :: Interpreter ()
-abort = empty
-
 emptyInterpreter :: Interpreter ()
-emptyInterpreter = do
-  requireStm EmptyStm
-  continue
+emptyInterpreter = onStm EmptyStm $
+  return ()
 
 valueInterpreter :: Interpreter ()
-valueInterpreter = do
-  value <- requireValueStm
+valueInterpreter = onValueStm $ \ value -> do
   doPush value
-  continue
 
 movementInterpreter :: Interpreter ()
-movementInterpreter = do
-  movement <- requireMovementStm
+movementInterpreter = onMovementStm $ \ movement -> do
   doMove movement
-  continue
 
 randomMovementInterpreter :: Interpreter ()
-randomMovementInterpreter = do
-  requireStm RandomMovementStm
+randomMovementInterpreter = onStm RandomMovementStm $
   doRandomMove
-  continue
 
 endInterpreter :: Interpreter ()
-endInterpreter = do
-  requireStm EndStm
+endInterpreter = onStm EndStm $
   abort
 
 popAndPrintValueInterpreter :: Interpreter ()
-popAndPrintValueInterpreter = do
-  requireStm PopAndPrintValueStm
+popAndPrintValueInterpreter = onStm PopAndPrintValueStm $ do
   value <- doPop
   doPrintAsInt value
-  continue
 
 popAndPrintCharInterpreter :: Interpreter ()
-popAndPrintCharInterpreter = do
-  requireStm PopAndPrintCharStm
+popAndPrintCharInterpreter = onStm PopAndPrintCharStm $ do
   value <- doPop
   doPrintAsChar value
-  continue
 
 popAndDiscardInterpreter :: Interpreter ()
-popAndDiscardInterpreter = do
-  requireStm PopAndDiscardStm
+popAndDiscardInterpreter = onStm PopAndDiscardStm $ do
   _ <- doPop
-  continue
+  return ()
 
 popAndMoveHorizontalInterpreter :: Interpreter ()
-popAndMoveHorizontalInterpreter = do
-  requireStm PopAndMoveHorizontalStm
+popAndMoveHorizontalInterpreter = onStm PopAndMoveHorizontalStm $ do
   value <- doPop
   doMove $ if value == 0 then RightMvm else LeftMvm
-  continue
 
 popAndMoveVerticalInterpreter :: Interpreter ()
-popAndMoveVerticalInterpreter = do
-  requireStm PopAndMoveVerticalStm
+popAndMoveVerticalInterpreter = onStm PopAndMoveVerticalStm $ do
   value <- doPop
   doMove $ if value == 0 then DownMvm else UpMvm
-  continue
 
 duplicateInterpreter :: Interpreter ()
-duplicateInterpreter = do
-  requireStm DuplicateStm
+duplicateInterpreter = onStm DuplicateStm $ do
   value <- doPeekOrElse 0
   doPush value
-  continue
 
 swapInterpreter :: Interpreter ()
-swapInterpreter = do
-  requireStm SwapStm
+swapInterpreter = onStm SwapStm $ do
   value <- doPop
   value' <- doPeekOrElse 0
   doPush value
   doPush value'
-  continue
 
 addInterpreter :: Interpreter ()
-addInterpreter = do
-  requireStm AddStm
+addInterpreter = onStm AddStm $ do
   value <- doPop
   value' <- doPop
   doPush $ value + value'
-  continue
 
 subInterpreter :: Interpreter ()
-subInterpreter = do
-  requireStm SubStm
+subInterpreter = onStm SubStm $ do
   value <- doPop
   value' <- doPop
   doPush $ value - value'
-  continue
 
 mulInterpreter :: Interpreter ()
-mulInterpreter = do
-  requireStm MulStm
+mulInterpreter = onStm MulStm $ do
   value <- doPop
   value' <- doPop
   doPush $ value * value'
-  continue
 
 divInterpreter :: Interpreter ()
-divInterpreter = do
-  requireStm DivStm
+divInterpreter = onStm DivStm $ do
   value <- doPop
   value' <- doPop
   doPush $ value `div` value'
-  continue
 
 modInterpreter :: Interpreter ()
-modInterpreter = do
-  requireStm ModStm
+modInterpreter = onStm ModStm $ do
   value <- doPop
   value' <- doPop
   doPush $ value `mod` value'
-  continue
 
 greaterInterpreter :: Interpreter ()
-greaterInterpreter = do
-  requireStm GreaterStm
+greaterInterpreter = onStm GreaterStm $ do
   value <- doPop
   value' <- doPop
   doPush $ if value' > value then 1 else 0
-  continue
 
 notInterpreter :: Interpreter ()
-notInterpreter = do
-  requireStm NotStm
+notInterpreter = onStm NotStm $ do
   value <- doPop
   doPush $ if value == 0 then 1 else 0
-  continue
 
 skipInterpreter :: Interpreter ()
-skipInterpreter = do
-  requireStm SkipStm
-  continue
+skipInterpreter = onStm SkipStm $ do
+  return ()
 
 getInterpreter :: Interpreter ()
-getInterpreter = do
-  requireStm GetStm
+getInterpreter = onStm GetStm $ do
   value <- doPop
   value' <- doPop
   character <- doGetCharacter (value', value)
   doPush $ Char.ord character
-  continue
 
 setInterpreter :: Interpreter ()
-setInterpreter = do
-  requireStm SetStm
+setInterpreter = onStm SetStm $ do
   value <- doPop
   value' <- doPop
   value'' <- doPop
   let character = Char.chr value''
   let statement = parseStatement character
   doSet (value', value) (character, statement)
-  continue
 
 toggleInterpreter :: Interpreter ()
-toggleInterpreter = do
-  requireStm ToggleReadStm
+toggleInterpreter = onStm ToggleReadStm $ do
   continue
   readInterpreter
 
 readInterpreter :: Interpreter ()
-readInterpreter = do
-  mCharacter <- requireToggleReadStm
+readInterpreter = onToggleReadStm $ \ mCharacter -> do
   case mCharacter of
     Nothing ->
-      continue
+      return ()
     (Just character) -> do
       doPush $ Char.ord character
       continue
